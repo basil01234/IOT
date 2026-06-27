@@ -1,0 +1,113 @@
+#include <ESP8266WiFi.h>
+#include <Espalexa.h>
+
+const char* ssid = "YOUR_WIFI";
+const char* password = "YOUR_PASSWORD";
+
+#define RELAY_PIN 5   // D1 = GPIO5
+
+Espalexa espalexa;
+
+int currentMode = 0;   // 0 = off/unknown
+
+void pulseRelayOnce() {
+  // Active LOW relay
+  digitalWrite(RELAY_PIN, HIGH);  // OFF
+  delay(400);
+
+  digitalWrite(RELAY_PIN, LOW);   // ON
+  delay(400);
+}
+
+void setMode(int targetMode) {
+  if (targetMode < 1 || targetMode > 9) return;
+
+  if (currentMode == targetMode) {
+    Serial.println("Already in selected mode");
+    return;
+  }
+
+  int steps = (targetMode - currentMode + 9) % 9;
+
+  Serial.print("Current Mode: ");
+  Serial.println(currentMode);
+
+  Serial.print("Target Mode: ");
+  Serial.println(targetMode);
+
+  Serial.print("Steps Needed: ");
+  Serial.println(steps);
+
+  for (int i = 0; i < steps; i++) {
+    pulseRelayOnce();
+  }
+
+  digitalWrite(RELAY_PIN, LOW); // keep bulb ON
+
+  currentMode = targetMode;
+
+  Serial.print("Mode Set To: ");
+  Serial.println(currentMode);
+}
+
+int brightnessToMode(uint8_t brightness) {
+  if (brightness == 0) return 0;
+
+  if (brightness <= 28) return 1;       
+  else if (brightness <= 56) return 2;  
+  else if (brightness <= 84) return 3;  
+  else if (brightness <= 112) return 4; 
+  else if (brightness <= 140) return 5; 
+  else if (brightness <= 168) return 6; 
+  else if (brightness <= 196) return 7; 
+  else if (brightness <= 224) return 8; 
+  else return 9;                        
+}
+
+void magicLightChanged(uint8_t brightness) {
+  Serial.print("Alexa Brightness Value: ");
+  Serial.println(brightness);
+
+  if (brightness == 0) {
+    digitalWrite(RELAY_PIN, HIGH); // OFF
+    Serial.println("Light OFF");
+    return;
+  }
+
+  int targetMode = brightnessToMode(brightness);
+
+  Serial.print("Mapped Mode: ");
+  Serial.println(targetMode);
+
+  setMode(targetMode);
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, HIGH); // OFF initially
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+
+  Serial.print("Connecting to WiFi");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println();
+  Serial.print("Connected. IP: ");
+  Serial.println(WiFi.localIP());
+
+  espalexa.addDevice("Magic Light", magicLightChanged);
+  espalexa.begin();
+
+  Serial.println("Alexa Magic Light Ready");
+}
+
+void loop() {
+  espalexa.loop();
+}
